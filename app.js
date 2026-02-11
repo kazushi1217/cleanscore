@@ -1250,9 +1250,9 @@ async function exportHistoryPDF() {
     }
     if (comments.length === 0) return '';
     return `
-      <div style="margin-bottom:10px;padding:8px;background:#f9fafb;border-radius:6px;border-left:3px solid #6366f1;">
-        <div style="font-size:11px;color:#6b7280;margin-bottom:4px;"><strong>${ev.propertyName}</strong> ― ${ev.date}（${ev.staff.map(s => s.name).join('、')}）</div>
-        <div style="font-size:11px;line-height:1.6;">${comments.join('<br>')}</div>
+      <div style="margin-bottom:4px;padding:4px 6px;background:#f9fafb;border-radius:4px;border-left:2px solid #6366f1;">
+        <div style="font-size:9px;color:#6b7280;margin-bottom:1px;"><strong>${ev.propertyName}</strong> ― ${ev.date}（${ev.staff.map(s => s.name).join('、')}）</div>
+        <div style="font-size:9px;line-height:1.4;">${comments.join('<br>')}</div>
       </div>`;
   }).filter(Boolean).join('');
 
@@ -1263,65 +1263,65 @@ async function exportHistoryPDF() {
     chartImgSrc = chartCanvas.toDataURL('image/png');
   }
 
-  // 印刷用HTML
+  // 印刷用HTML（コンパクト版・1ページに収まるよう最適化）
   const printHTML = `
-    <div style="font-family:'Noto Sans JP','Hiragino Sans',sans-serif; color:#1a1a1a; padding:32px; width:720px; background:white;">
-      <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-        <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6); color:white; padding:8px 14px; border-radius:8px; font-weight:bold; font-size:18px;">CS</div>
+    <div style="font-family:'Noto Sans JP','Hiragino Sans',sans-serif; color:#1a1a1a; padding:20px 24px; width:720px; background:white;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+        <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6); color:white; padding:5px 10px; border-radius:6px; font-weight:bold; font-size:14px;">CS</div>
         <div>
-          <div style="font-size:20px; font-weight:bold; color:#6366f1;">CleanScore スコア推移レポート</div>
-          <div style="font-size:12px; color:#9ca3af;">出力日: ${new Date().toISOString().split('T')[0]}</div>
+          <div style="font-size:16px; font-weight:bold; color:#6366f1;">CleanScore スコア推移レポート</div>
+          <div style="font-size:10px; color:#9ca3af;">出力日: ${new Date().toISOString().split('T')[0]}</div>
         </div>
       </div>
-      <hr style="border:none;border-top:2px solid #e5e7eb;margin:16px 0;">
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:8px 0;">
 
       <!-- 全体サマリー -->
-      <div style="display:flex; gap:20px; margin-bottom:20px;">
-        <div style="flex:1; text-align:center; padding:16px; background:#f0fdf4; border-radius:8px;">
-          <div style="font-size:11px; color:#6b7280;">全体平均</div>
-          <div style="font-size:32px; font-weight:bold; color:${getScoreColor(overallAvg)};">${overallAvg}</div>
+      <div style="display:flex; gap:10px; margin-bottom:10px;">
+        <div style="flex:1; text-align:center; padding:8px; background:#f0fdf4; border-radius:6px;">
+          <div style="font-size:9px; color:#6b7280;">全体平均</div>
+          <div style="font-size:22px; font-weight:bold; color:${getScoreColor(overallAvg)};">${overallAvg}</div>
         </div>
-        <div style="flex:1; text-align:center; padding:16px; background:#f0fdf4; border-radius:8px;">
-          <div style="font-size:11px; color:#6b7280;">最高</div>
-          <div style="font-size:32px; font-weight:bold; color:#10b981;">${overallMax}</div>
+        <div style="flex:1; text-align:center; padding:8px; background:#f0fdf4; border-radius:6px;">
+          <div style="font-size:9px; color:#6b7280;">最高</div>
+          <div style="font-size:22px; font-weight:bold; color:#10b981;">${overallMax}</div>
         </div>
-        <div style="flex:1; text-align:center; padding:16px; background:#fef2f2; border-radius:8px;">
-          <div style="font-size:11px; color:#6b7280;">最低</div>
-          <div style="font-size:32px; font-weight:bold; color:#ef4444;">${overallMin}</div>
+        <div style="flex:1; text-align:center; padding:8px; background:#fef2f2; border-radius:6px;">
+          <div style="font-size:9px; color:#6b7280;">最低</div>
+          <div style="font-size:22px; font-weight:bold; color:#ef4444;">${overallMin}</div>
         </div>
-        <div style="flex:1; text-align:center; padding:16px; background:#f5f3ff; border-radius:8px;">
-          <div style="font-size:11px; color:#6b7280;">評価回数</div>
-          <div style="font-size:32px; font-weight:bold; color:#6366f1;">${evals.length}</div>
+        <div style="flex:1; text-align:center; padding:8px; background:#f5f3ff; border-radius:6px;">
+          <div style="font-size:9px; color:#6b7280;">評価回数</div>
+          <div style="font-size:22px; font-weight:bold; color:#6366f1;">${evals.length}</div>
         </div>
       </div>
 
       <!-- グラフ -->
       ${chartImgSrc ? `
-      <h3 style="font-size:14px;color:#374151;margin:20px 0 8px;border-left:4px solid #6366f1;padding-left:8px;">スコア推移グラフ</h3>
-      <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:16px;">
-        <img src="${chartImgSrc}" style="width:100%;height:auto;" />
+      <h3 style="font-size:11px;color:#374151;margin:8px 0 4px;border-left:3px solid #6366f1;padding-left:6px;">スコア推移グラフ</h3>
+      <div style="background:#f9fafb;padding:6px;border-radius:6px;margin-bottom:8px;">
+        <img src="${chartImgSrc}" style="width:100%;max-height:160px;object-fit:contain;" />
       </div>
       ` : ''}
 
       <!-- 個人別統計 -->
-      <h3 style="font-size:14px;color:#374151;margin:20px 0 8px;border-left:4px solid #8b5cf6;padding-left:8px;">個人別統計</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+      <h3 style="font-size:11px;color:#374151;margin:8px 0 4px;border-left:3px solid #8b5cf6;padding-left:6px;">個人別統計</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px;">
         <thead>
           <tr style="background:#f3f4f6;">
-            <th style="text-align:left;padding:8px;border:1px solid #e5e7eb;">名前</th>
-            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:60px;">回数</th>
-            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:60px;">平均</th>
-            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:60px;">最高</th>
-            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:60px;">最低</th>
+            <th style="text-align:left;padding:4px 6px;border:1px solid #e5e7eb;">名前</th>
+            <th style="text-align:center;padding:4px 6px;border:1px solid #e5e7eb;width:50px;">回数</th>
+            <th style="text-align:center;padding:4px 6px;border:1px solid #e5e7eb;width:50px;">平均</th>
+            <th style="text-align:center;padding:4px 6px;border:1px solid #e5e7eb;width:50px;">最高</th>
+            <th style="text-align:center;padding:4px 6px;border:1px solid #e5e7eb;width:50px;">最低</th>
           </tr>
         </thead>
         <tbody>
           <tr style="background:#f0fdf4;">
-            <td style="font-weight:600;">📊 全体</td>
-            <td style="text-align:center;">${evals.length}回</td>
-            <td style="text-align:center;font-weight:bold;color:${getScoreColor(overallAvg)}">${overallAvg}</td>
-            <td style="text-align:center;color:#10b981;font-weight:600;">${overallMax}</td>
-            <td style="text-align:center;color:#ef4444;font-weight:600;">${overallMin}</td>
+            <td style="font-weight:600;padding:4px 6px;border:1px solid #e5e7eb;">📊 全体</td>
+            <td style="text-align:center;padding:4px 6px;border:1px solid #e5e7eb;">${evals.length}回</td>
+            <td style="text-align:center;font-weight:bold;color:${getScoreColor(overallAvg)};padding:4px 6px;border:1px solid #e5e7eb;">${overallAvg}</td>
+            <td style="text-align:center;color:#10b981;font-weight:600;padding:4px 6px;border:1px solid #e5e7eb;">${overallMax}</td>
+            <td style="text-align:center;color:#ef4444;font-weight:600;padding:4px 6px;border:1px solid #e5e7eb;">${overallMin}</td>
           </tr>
           ${statsRows}
         </tbody>
@@ -1329,12 +1329,12 @@ async function exportHistoryPDF() {
 
       <!-- コメント一覧 -->
       ${commentsHTML ? `
-      <h3 style="font-size:14px;color:#374151;margin:20px 0 8px;border-left:4px solid #10b981;padding-left:8px;">コメント一覧（直近10件）</h3>
+      <h3 style="font-size:11px;color:#374151;margin:8px 0 4px;border-left:3px solid #10b981;padding-left:6px;">コメント一覧（直近10件）</h3>
       ${commentsHTML}
       ` : ''}
 
-      <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0 8px;">
-      <div style="font-size:10px;color:#9ca3af;text-align:right;">CleanScore - ${new Date().toISOString().split('T')[0]} 生成</div>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:8px 0 4px;">
+      <div style="font-size:8px;color:#9ca3af;text-align:right;">CleanScore - ${new Date().toISOString().split('T')[0]} 生成</div>
     </div>
   `;
 
