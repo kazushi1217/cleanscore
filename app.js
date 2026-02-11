@@ -654,7 +654,93 @@ function renderHistoryPage() {
   filter.onchange = () => renderHistoryChart();
 
   renderHistoryChart();
+  renderHistoryStats(evals, staffList);
   renderHistoryTable(evals);
+
+  // PDF出力ボタン
+  document.getElementById('exportHistoryPdfBtn').onclick = () => exportHistoryPDF();
+}
+
+function renderHistoryStats(evals, staffList) {
+  const container = document.getElementById('historyStatsContainer');
+
+  if (staffList.length === 0 || evals.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state__icon">📊</div><p class="empty-state__text">評価データがありません</p></div>';
+    return;
+  }
+
+  // 全体統計
+  const allScores = evals.map(e => e.scores.totalScore);
+  const overallAvg = Math.round(allScores.reduce((s, v) => s + v, 0) / allScores.length);
+  const overallMax = Math.max(...allScores);
+  const overallMin = Math.min(...allScores);
+
+  // 個人カード
+  const cards = staffList.map(s => {
+    const staffEvals = evals.filter(e => e.scores.staffScores && e.scores.staffScores[s.name] !== undefined);
+    if (staffEvals.length === 0) return '';
+
+    const scores = staffEvals.map(e => e.scores.staffScores[s.name]);
+    const avg = Math.round(scores.reduce((sum, v) => sum + v, 0) / scores.length);
+    const max = Math.max(...scores);
+    const min = Math.min(...scores);
+    const cls = getScoreClass(avg);
+
+    return `
+      <div class="staff-card">
+        <div class="staff-card__header">
+          <div class="staff-card__avatar">${s.name.charAt(0)}</div>
+          <div>
+            <div class="staff-card__name">${s.name}</div>
+            <div class="staff-card__areas">${staffEvals.length}回の評価</div>
+          </div>
+        </div>
+        <div class="staff-card__score ${cls}">${avg}<span style="font-size:0.9rem;color:var(--text-muted)">点</span></div>
+        <div class="stat-row">
+          <div class="stat-item">
+            <div class="stat-item__label">🏆 最高</div>
+            <div class="stat-item__value text-success">${max}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__label">📉 最低</div>
+            <div class="stat-item__value text-danger">${min}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__label">📊 平均</div>
+            <div class="stat-item__value" style="color:${getScoreColor(avg)}">${avg}</div>
+          </div>
+        </div>
+      </div>`;
+  }).filter(Boolean).join('');
+
+  // 全体統計カード
+  const overallCard = `
+    <div class="staff-card">
+      <div class="staff-card__header">
+        <div class="staff-card__avatar" style="background:linear-gradient(135deg,#10b981,#34d399);">全</div>
+        <div>
+          <div class="staff-card__name">全体</div>
+          <div class="staff-card__areas">${evals.length}回の評価</div>
+        </div>
+      </div>
+      <div class="staff-card__score ${getScoreClass(overallAvg)}">${overallAvg}<span style="font-size:0.9rem;color:var(--text-muted)">点</span></div>
+      <div class="stat-row">
+        <div class="stat-item">
+          <div class="stat-item__label">🏆 最高</div>
+          <div class="stat-item__value text-success">${overallMax}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-item__label">📉 最低</div>
+          <div class="stat-item__value text-danger">${overallMin}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-item__label">📊 平均</div>
+          <div class="stat-item__value" style="color:${getScoreColor(overallAvg)}">${overallAvg}</div>
+        </div>
+      </div>
+    </div>`;
+
+  container.innerHTML = `<div class="staff-scores">${overallCard}${cards}</div>`;
 }
 
 function renderHistoryChart() {
@@ -1104,6 +1190,195 @@ window.exportPDF = async function (evalId) {
     document.body.removeChild(container);
   }
 };
+
+// ========================================
+// スコア推移PDF出力
+// ========================================
+async function exportHistoryPDF() {
+  const evals = Storage.getEvaluations();
+  const staffList = Storage.getStaffList();
+
+  if (evals.length === 0) {
+    showToast('出力する評価データがありません', 'error');
+    return;
+  }
+
+  showToast('PDF生成中...', 'success');
+
+  // 全体統計
+  const allScores = evals.map(e => e.scores.totalScore);
+  const overallAvg = Math.round(allScores.reduce((s, v) => s + v, 0) / allScores.length);
+  const overallMax = Math.max(...allScores);
+  const overallMin = Math.min(...allScores);
+
+  // 個人統計を集計
+  const staffStats = staffList.map(s => {
+    const staffEvals = evals.filter(e => e.scores.staffScores && e.scores.staffScores[s.name] !== undefined);
+    if (staffEvals.length === 0) return null;
+    const scores = staffEvals.map(e => e.scores.staffScores[s.name]);
+    return {
+      name: s.name,
+      count: staffEvals.length,
+      avg: Math.round(scores.reduce((sum, v) => sum + v, 0) / scores.length),
+      max: Math.max(...scores),
+      min: Math.min(...scores),
+    };
+  }).filter(Boolean);
+
+  // 個人統計のHTML行
+  const statsRows = staffStats.map(s => `
+    <tr>
+      <td style="font-weight:600;">${s.name}</td>
+      <td style="text-align:center;">${s.count}回</td>
+      <td style="text-align:center;font-weight:bold;color:${getScoreColor(s.avg)}">${s.avg}</td>
+      <td style="text-align:center;color:#10b981;font-weight:600;">${s.max}</td>
+      <td style="text-align:center;color:#ef4444;font-weight:600;">${s.min}</td>
+    </tr>
+  `).join('');
+
+  // コメント一覧（全評価から、直近10件まで）
+  const recentEvals = [...evals].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+  const commentsHTML = recentEvals.map(ev => {
+    const comments = [];
+    for (const area of AREAS) {
+      if (ev.comments && ev.comments[area.id]) {
+        comments.push(`<span style="color:#6366f1;">${area.emoji}${area.name}:</span> ${ev.comments[area.id]}`);
+      }
+    }
+    if (ev.overallComment) {
+      comments.push(`<span style="color:#10b981;">💬全体:</span> ${ev.overallComment}`);
+    }
+    if (comments.length === 0) return '';
+    return `
+      <div style="margin-bottom:10px;padding:8px;background:#f9fafb;border-radius:6px;border-left:3px solid #6366f1;">
+        <div style="font-size:11px;color:#6b7280;margin-bottom:4px;"><strong>${ev.propertyName}</strong> ― ${ev.date}（${ev.staff.map(s => s.name).join('、')}）</div>
+        <div style="font-size:11px;line-height:1.6;">${comments.join('<br>')}</div>
+      </div>`;
+  }).filter(Boolean).join('');
+
+  // グラフ画像を取得
+  const chartCanvas = document.getElementById('historyChart');
+  let chartImgSrc = '';
+  if (chartCanvas && chartCanvas.width > 0) {
+    chartImgSrc = chartCanvas.toDataURL('image/png');
+  }
+
+  // 印刷用HTML
+  const printHTML = `
+    <div style="font-family:'Noto Sans JP','Hiragino Sans',sans-serif; color:#1a1a1a; padding:32px; width:720px; background:white;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+        <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6); color:white; padding:8px 14px; border-radius:8px; font-weight:bold; font-size:18px;">CS</div>
+        <div>
+          <div style="font-size:20px; font-weight:bold; color:#6366f1;">CleanScore スコア推移レポート</div>
+          <div style="font-size:12px; color:#9ca3af;">出力日: ${new Date().toISOString().split('T')[0]}</div>
+        </div>
+      </div>
+      <hr style="border:none;border-top:2px solid #e5e7eb;margin:16px 0;">
+
+      <!-- 全体サマリー -->
+      <div style="display:flex; gap:20px; margin-bottom:20px;">
+        <div style="flex:1; text-align:center; padding:16px; background:#f0fdf4; border-radius:8px;">
+          <div style="font-size:11px; color:#6b7280;">全体平均</div>
+          <div style="font-size:32px; font-weight:bold; color:${getScoreColor(overallAvg)};">${overallAvg}</div>
+        </div>
+        <div style="flex:1; text-align:center; padding:16px; background:#f0fdf4; border-radius:8px;">
+          <div style="font-size:11px; color:#6b7280;">最高</div>
+          <div style="font-size:32px; font-weight:bold; color:#10b981;">${overallMax}</div>
+        </div>
+        <div style="flex:1; text-align:center; padding:16px; background:#fef2f2; border-radius:8px;">
+          <div style="font-size:11px; color:#6b7280;">最低</div>
+          <div style="font-size:32px; font-weight:bold; color:#ef4444;">${overallMin}</div>
+        </div>
+        <div style="flex:1; text-align:center; padding:16px; background:#f5f3ff; border-radius:8px;">
+          <div style="font-size:11px; color:#6b7280;">評価回数</div>
+          <div style="font-size:32px; font-weight:bold; color:#6366f1;">${evals.length}</div>
+        </div>
+      </div>
+
+      <!-- グラフ -->
+      ${chartImgSrc ? `
+      <h3 style="font-size:14px;color:#374151;margin:20px 0 8px;border-left:4px solid #6366f1;padding-left:8px;">スコア推移グラフ</h3>
+      <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:16px;">
+        <img src="${chartImgSrc}" style="width:100%;height:auto;" />
+      </div>
+      ` : ''}
+
+      <!-- 個人別統計 -->
+      <h3 style="font-size:14px;color:#374151;margin:20px 0 8px;border-left:4px solid #8b5cf6;padding-left:8px;">個人別統計</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="text-align:left;padding:8px;border:1px solid #e5e7eb;">名前</th>
+            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:60px;">回数</th>
+            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:60px;">平均</th>
+            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:60px;">最高</th>
+            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:60px;">最低</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#f0fdf4;">
+            <td style="font-weight:600;">📊 全体</td>
+            <td style="text-align:center;">${evals.length}回</td>
+            <td style="text-align:center;font-weight:bold;color:${getScoreColor(overallAvg)}">${overallAvg}</td>
+            <td style="text-align:center;color:#10b981;font-weight:600;">${overallMax}</td>
+            <td style="text-align:center;color:#ef4444;font-weight:600;">${overallMin}</td>
+          </tr>
+          ${statsRows}
+        </tbody>
+      </table>
+
+      <!-- コメント一覧 -->
+      ${commentsHTML ? `
+      <h3 style="font-size:14px;color:#374151;margin:20px 0 8px;border-left:4px solid #10b981;padding-left:8px;">コメント一覧（直近10件）</h3>
+      ${commentsHTML}
+      ` : ''}
+
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0 8px;">
+      <div style="font-size:10px;color:#9ca3af;text-align:right;">CleanScore - ${new Date().toISOString().split('T')[0]} 生成</div>
+    </div>
+  `;
+
+  // 一時要素を作成してレンダリング
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.left = '-9999px';
+  container.style.top = '0';
+  container.innerHTML = printHTML;
+  document.body.appendChild(container);
+
+  try {
+    const canvas = await html2canvas(container.firstElementChild, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 10;
+    const imgWidth = pageWidth - margin * 2;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const usableHeight = pageHeight - margin * 2;
+
+    if (imgHeight <= usableHeight) {
+      doc.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
+    } else {
+      doc.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
+    }
+
+    doc.save(`CleanScore_スコア推移_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToast('スコア推移PDFを出力しました');
+  } catch (err) {
+    showToast('PDF生成に失敗しました: ' + err.message, 'error');
+    console.error(err);
+  } finally {
+    document.body.removeChild(container);
+  }
+}
 
 // ========================================
 // 初期化

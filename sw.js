@@ -1,5 +1,5 @@
 // CleanScore Service Worker
-const CACHE_NAME = 'cleanscore-v2';
+const CACHE_NAME = 'cleanscore-v3';
 const ASSETS = [
     './',
     './index.html',

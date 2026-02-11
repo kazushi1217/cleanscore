@@ -115,6 +115,7 @@
       <div class="card">
         <div class="card__header">
           <h2 class="card__title"><span class="emoji">📈</span> スコア推移</h2>
+          <button class="btn btn-sm btn-primary" id="exportHistoryPdfBtn">📄 PDF出力</button>
         </div>
         <div class="filter-bar">
           <div class="form-group" style="margin-bottom:0;">
@@ -125,6 +126,19 @@
         </div>
         <div class="chart-container">
           <canvas id="historyChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 個人別統計 -->
+      <div class="card" id="historyStatsCard">
+        <div class="card__header">
+          <h2 class="card__title"><span class="emoji">📊</span> 個人別統計</h2>
+        </div>
+        <div id="historyStatsContainer">
+          <div class="empty-state">
+            <div class="empty-state__icon">📊</div>
+            <p class="empty-state__text">評価データがありません</p>
+          </div>
         </div>
       </div>
 
