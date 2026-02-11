@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CleanScore - ハウスクリーニング品質評価</title>
+  <meta name="description" content="ハウスクリーニングの品質を減点方式で評価。チーム別スコア算出・推移グラフ・PDF出力に対応。">
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#6366f1">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CleanScore">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="index.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+
+<body>
+  <div class="app" id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header__title">
+        <div class="header__icon">✨</div>
+        <div class="header__text">
+          <h1>CleanScore</h1>
+          <p>ハウスクリーニング品質評価システム</p>
+        </div>
+      </div>
+      <nav class="nav-tabs" id="navTabs">
+        <button class="nav-tab active" data-page="evaluation">📋 評価入力</button>
+        <button class="nav-tab" data-page="result">📊 結果</button>
+        <button class="nav-tab" data-page="history">📈 スコア推移</button>
+        <button class="nav-tab" data-page="staff">👤 スタッフ</button>
+      </nav>
+    </header>
+
+    <!-- ===============================
+         Page: 評価入力
+         =============================== -->
+    <div class="page active" id="page-evaluation">
+      <!-- 基本情報 -->
+      <div class="card">
+        <div class="card__header">
+          <h2 class="card__title"><span class="emoji">🏠</span> 基本情報</h2>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">物件名</label>
+            <input type="text" class="form-input" id="propertyName" placeholder="例: ○○マンション 201号室">
+          </div>
+          <div class="form-group">
+            <label class="form-label">評価日</label>
+            <input type="date" class="form-input" id="evalDate">
+          </div>
+        </div>
+      </div>
+
+      <!-- スタッフ割当 -->
+      <div class="card">
+        <div class="card__header">
+          <h2 class="card__title"><span class="emoji">👥</span> スタッフ・担当箇所の割当</h2>
+          <button class="btn btn-sm btn-secondary" id="addStaffBtn">+ 追加</button>
+        </div>
+        <div class="staff-list" id="staffAssignment">
+          <!-- Dynamic staff rows -->
+        </div>
+        <p class="text-muted mt-sm" style="font-size:0.78rem;">※ 各スタッフの担当箇所をクリックして選択してください。1人体制の場合は全箇所が自動選択されます。</p>
+      </div>
+
+      <!-- 評価箇所 -->
+      <div id="evaluationAreas">
+        <!-- Dynamic area sections -->
+      </div>
+
+      <!-- 全体コメント -->
+      <div class="card">
+        <div class="card__header">
+          <h2 class="card__title"><span class="emoji">💬</span> 全体コメント</h2>
+        </div>
+        <div class="form-group">
+          <textarea class="form-textarea" id="overallComment" rows="3" placeholder="全体的な所見やメモを記入..."></textarea>
+        </div>
+      </div>
+
+      <!-- Action Bar -->
+      <div class="action-bar">
+        <button class="btn btn-secondary" id="clearFormBtn">🗑 クリア</button>
+        <button class="btn btn-primary btn-lg" id="calculateBtn">✨ スコアを算出</button>
+      </div>
+    </div>
+
+    <!-- ===============================
+         Page: 結果
+         =============================== -->
+    <div class="page" id="page-result">
+      <div id="resultContent">
+        <div class="empty-state">
+          <div class="empty-state__icon">📊</div>
+          <p class="empty-state__text">まだ評価結果がありません<br>評価入力タブから評価を行ってください</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===============================
+         Page: スコア推移
+         =============================== -->
+    <div class="page" id="page-history">
+      <div class="card">
+        <div class="card__header">
+          <h2 class="card__title"><span class="emoji">📈</span> スコア推移</h2>
+        </div>
+        <div class="filter-bar">
+          <div class="form-group" style="margin-bottom:0;">
+            <select class="form-select" id="historyStaffFilter">
+              <option value="all">全体スコア</option>
+            </select>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="historyChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 過去の評価一覧 -->
+      <div class="card">
+        <div class="card__header">
+          <h2 class="card__title"><span class="emoji">📝</span> 評価履歴</h2>
+          <div class="flex gap-sm">
+            <button class="btn btn-sm btn-secondary" id="exportJsonBtn">💾 エクスポート</button>
+            <label class="btn btn-sm btn-secondary" style="cursor:pointer;">
+              📂 インポート
+              <input type="file" accept=".json" id="importJsonInput" style="display:none;">
+            </label>
+          </div>
+        </div>
+        <div id="historyTableContainer">
+          <div class="empty-state">
+            <div class="empty-state__icon">📝</div>
+            <p class="empty-state__text">まだ評価履歴がありません</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===============================
+         Page: スタッフ管理
+         =============================== -->
+    <div class="page" id="page-staff">
+      <div class="card">
+        <div class="card__header">
+          <h2 class="card__title"><span class="emoji">👤</span> スタッフ管理</h2>
+          <button class="btn btn-sm btn-primary" id="addNewStaffBtn">+ 新規登録</button>
+        </div>
+        <div id="staffManagerList">
+          <div class="empty-state">
+            <div class="empty-state__icon">👤</div>
+            <p class="empty-state__text">スタッフが登録されていません</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 個人スコア平均 -->
+      <div class="card">
+        <div class="card__header">
+          <h2 class="card__title"><span class="emoji">📊</span> 個人スコア平均</h2>
+        </div>
+        <div id="staffAverages">
+          <div class="empty-state">
+            <div class="empty-state__icon">📊</div>
+            <p class="empty-state__text">評価データがありません</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    // Service Worker 登録
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('SW registered:', reg.scope))
+          .catch(err => console.log('SW registration failed:', err));
+      });
+    }
+  </script>
+</body>
+
+</html>

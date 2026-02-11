@@ -1,0 +1,20 @@
+{
+  "name": "CleanScore - ハウスクリーニング品質評価",
+  "short_name": "CleanScore",
+  "description": "ハウスクリーニングの品質を減点方式で評価。チーム別スコア算出・推移グラフ・PDF出力に対応。",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "ja"
+}
