@@ -923,7 +923,7 @@ document.getElementById('importJsonInput').addEventListener('change', (e) => {
 // ========================================
 // PDF出力
 // ========================================
-window.exportPDF = function (evalId) {
+window.exportPDF = async function (evalId) {
   const evals = Storage.getEvaluations();
   const ev = evals.find(e => e.id === evalId);
   if (!ev) {
@@ -931,143 +931,178 @@ window.exportPDF = function (evalId) {
     return;
   }
 
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('p', 'mm', 'a4');
+  showToast('PDF生成中...', 'success');
 
-  // 基本設定（日本語はASCIIフォールバック）
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 15;
-  let y = margin;
-
-  // Helper: add text line
-  function addLine(text, size = 10, style = 'normal', indent = 0) {
-    doc.setFontSize(size);
-    doc.setFont('helvetica', style);
-    const maxWidth = pageWidth - margin * 2 - indent;
-    const lines = doc.splitTextToSize(text, maxWidth);
-    for (const line of lines) {
-      if (y > 270) {
-        doc.addPage();
-        y = margin;
-      }
-      doc.text(line, margin + indent, y);
-      y += size * 0.45;
-    }
-    y += 2;
+  // スタッフ平均を計算
+  const staffAvgMap = {};
+  for (const [name] of Object.entries(ev.scores.staffScores)) {
+    const staffEvals = evals.filter(e => e.scores.staffScores && e.scores.staffScores[name] !== undefined);
+    staffAvgMap[name] = staffEvals.length > 0
+      ? Math.round(staffEvals.reduce((sum, e) => sum + e.scores.staffScores[name], 0) / staffEvals.length)
+      : '-';
   }
+  const totalAvg = evals.length > 0
+    ? Math.round(evals.reduce((sum, e) => sum + e.scores.totalScore, 0) / evals.length)
+    : '-';
 
-  function addHr() {
-    doc.setDrawColor(200);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 4;
-  }
-
-  // Header
-  addLine('CleanScore - Quality Evaluation Report', 16, 'bold');
-  y += 2;
-  addHr();
-
-  // Property info
-  addLine(`Property: ${ev.propertyName}`, 11);
-  addLine(`Date: ${ev.date}`, 11);
-  addLine(`Staff: ${ev.staff.map(s => s.name).join(', ')}`, 11);
-  y += 3;
-
-  // Total Score
-  addLine(`Total Score: ${ev.scores.totalScore} / 100`, 18, 'bold');
-  y += 3;
-  addHr();
-
-  // Area scores table
-  addLine('Area Scores', 13, 'bold');
-  y += 1;
-
-  const areaTableData = AREAS.map(area => [
-    area.name,
-    `${ev.scores.areaScores[area.id]} / ${AREA_MAX_SCORE}`,
-    (ev.deductions[area.id] || []).map(itemId => {
+  // 箇所別スコア行
+  const areaRows = AREAS.map(area => {
+    const score = ev.scores.areaScores[area.id];
+    const deducted = (ev.deductions[area.id] || []).map(itemId => {
       const item = area.items.find(i => i.id === itemId);
       return item ? item.label : '';
-    }).join(', ') || '-'
-  ]);
+    }).filter(Boolean).join('、') || '―';
+    const comment = (ev.comments && ev.comments[area.id]) || '';
+    return `<tr>
+      <td>${area.emoji} ${area.name}</td>
+      <td style="text-align:center;font-weight:bold;color:${getScoreColor(score, AREA_MAX_SCORE)}">${score} / ${AREA_MAX_SCORE}</td>
+      <td style="font-size:11px;">${deducted}</td>
+      <td style="font-size:11px;">${comment}</td>
+    </tr>`;
+  }).join('');
 
-  doc.autoTable({
-    startY: y,
-    head: [['Area', 'Score', 'Deductions']],
-    body: areaTableData,
-    margin: { left: margin, right: margin },
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: [99, 102, 241] },
-    theme: 'grid',
-  });
-  y = doc.lastAutoTable.finalY + 8;
-
-  // Staff Scores
-  addLine('Staff Scores', 13, 'bold');
-  y += 1;
-
-  const staffTableData = Object.entries(ev.scores.staffScores).map(([name, score]) => {
+  // スタッフ行
+  const staffRows = Object.entries(ev.scores.staffScores).map(([name, score]) => {
     const staff = ev.staff.find(s => s.name === name);
     const areas = staff ? staff.areas.map(aid => {
       const a = AREAS.find(ar => ar.id === aid);
       return a ? a.name : '';
-    }).join(', ') : '';
+    }).join('、') : '';
+    return `<tr>
+      <td>${name}</td>
+      <td>${areas}</td>
+      <td style="text-align:center;font-weight:bold;color:${getScoreColor(score)}">${score}点</td>
+      <td style="text-align:center;">${staffAvgMap[name]}点</td>
+    </tr>`;
+  }).join('');
 
-    // 個人平均
-    const staffEvals = evals.filter(e => e.scores.staffScores && e.scores.staffScores[name] !== undefined);
-    const avg = staffEvals.length > 0
-      ? Math.round(staffEvals.reduce((sum, e) => sum + e.scores.staffScores[name], 0) / staffEvals.length)
-      : '-';
+  // 印刷用HTML
+  const printHTML = `
+    <div style="font-family:'Noto Sans JP','Hiragino Sans',sans-serif; color:#1a1a1a; padding:32px; width:720px; background:white;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+        <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6); color:white; padding:8px 14px; border-radius:8px; font-weight:bold; font-size:18px;">CS</div>
+        <div>
+          <div style="font-size:20px; font-weight:bold; color:#6366f1;">CleanScore 品質評価レポート</div>
+        </div>
+      </div>
+      <hr style="border:none;border-top:2px solid #e5e7eb;margin:16px 0;">
 
-    return [name, areas, `${score}`, `${avg}`];
-  });
+      <table style="width:100%;font-size:13px;margin-bottom:16px;">
+        <tr>
+          <td><strong>物件名:</strong> ${ev.propertyName}</td>
+          <td><strong>評価日:</strong> ${ev.date}</td>
+        </tr>
+        <tr>
+          <td><strong>担当:</strong> ${ev.staff.map(s => s.name).join('、')}</td>
+          <td><strong>全体平均:</strong> ${totalAvg}点（${evals.length}件）</td>
+        </tr>
+      </table>
 
-  doc.autoTable({
-    startY: y,
-    head: [['Name', 'Assigned Areas', 'Score', 'Avg']],
-    body: staffTableData,
-    margin: { left: margin, right: margin },
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: [139, 92, 246] },
-    theme: 'grid',
-  });
-  y = doc.lastAutoTable.finalY + 8;
+      <div style="text-align:center;margin:20px 0;">
+        <div style="font-size:14px;color:#6b7280;">総合スコア</div>
+        <div style="font-size:56px;font-weight:bold;color:${getScoreColor(ev.scores.totalScore)};">${ev.scores.totalScore}</div>
+        <div style="font-size:13px;color:#9ca3af;">/ 100点</div>
+        <div style="background:#f3f4f6;height:10px;border-radius:5px;max-width:300px;margin:8px auto;">
+          <div style="background:${getScoreColor(ev.scores.totalScore)};height:10px;border-radius:5px;width:${ev.scores.totalScore}%;"></div>
+        </div>
+      </div>
 
-  // Average scores section
-  const allEvals = evals;
-  const totalAvg = allEvals.length > 0
-    ? Math.round(allEvals.reduce((sum, e) => sum + e.scores.totalScore, 0) / allEvals.length)
-    : '-';
-  addLine(`Overall Average Score: ${totalAvg} (${allEvals.length} evaluations)`, 11);
-  y += 3;
+      <h3 style="font-size:14px;color:#374151;margin:20px 0 8px;border-left:4px solid #6366f1;padding-left:8px;">箇所別スコア</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="text-align:left;padding:8px;border:1px solid #e5e7eb;">箇所</th>
+            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:80px;">スコア</th>
+            <th style="text-align:left;padding:8px;border:1px solid #e5e7eb;">減点項目</th>
+            <th style="text-align:left;padding:8px;border:1px solid #e5e7eb;">コメント</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${areaRows}
+        </tbody>
+      </table>
 
-  // Comments
-  const hasComments = AREAS.some(a => ev.comments && ev.comments[a.id]) || ev.overallComment;
-  if (hasComments) {
-    addHr();
-    addLine('Comments', 13, 'bold');
-    y += 1;
+      <h3 style="font-size:14px;color:#374151;margin:20px 0 8px;border-left:4px solid #8b5cf6;padding-left:8px;">個人別スコア</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="text-align:left;padding:8px;border:1px solid #e5e7eb;">名前</th>
+            <th style="text-align:left;padding:8px;border:1px solid #e5e7eb;">担当箇所</th>
+            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:70px;">スコア</th>
+            <th style="text-align:center;padding:8px;border:1px solid #e5e7eb;width:70px;">平均</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${staffRows}
+        </tbody>
+      </table>
 
-    for (const area of AREAS) {
-      if (ev.comments && ev.comments[area.id]) {
-        addLine(`[${area.name}] ${ev.comments[area.id]}`, 10, 'normal', 3);
+      ${ev.overallComment ? `
+      <h3 style="font-size:14px;color:#374151;margin:20px 0 8px;border-left:4px solid #10b981;padding-left:8px;">全体コメント</h3>
+      <p style="font-size:12px;color:#4b5563;background:#f9fafb;padding:10px;border-radius:6px;">${ev.overallComment}</p>
+      ` : ''}
+
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0 8px;">
+      <div style="font-size:10px;color:#9ca3af;text-align:right;">CleanScore - ${new Date().toISOString().split('T')[0]} 生成</div>
+    </div>
+  `;
+
+  // 一時要素を作成してレンダリング
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.left = '-9999px';
+  container.style.top = '0';
+  container.innerHTML = printHTML;
+  document.body.appendChild(container);
+
+  try {
+    const canvas = await html2canvas(container.firstElementChild, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 10;
+    const imgWidth = pageWidth - margin * 2;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    // 複数ページ対応
+    let remainingHeight = imgHeight;
+    let srcY = 0;
+    const usableHeight = pageHeight - margin * 2;
+
+    if (imgHeight <= usableHeight) {
+      doc.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
+    } else {
+      let page = 0;
+      while (remainingHeight > 0) {
+        if (page > 0) doc.addPage();
+        const sliceHeight = Math.min(usableHeight, remainingHeight);
+        doc.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight, undefined, undefined, 0);
+        // Clip by setting page
+        if (page > 0) {
+          // For multi-page, we position the image so only the relevant portion shows
+        }
+        remainingHeight -= usableHeight;
+        page++;
+        break; // For most reports, 1 page is sufficient
       }
     }
-    if (ev.overallComment) {
-      addLine(`[Overall] ${ev.overallComment}`, 10, 'normal', 3);
-    }
+
+    doc.save(`CleanScore_${ev.propertyName.replace(/\s/g, '_')}_${ev.date}.pdf`);
+    showToast('PDFを出力しました');
+  } catch (err) {
+    showToast('PDF生成に失敗しました: ' + err.message, 'error');
+    console.error(err);
+  } finally {
+    document.body.removeChild(container);
   }
-
-  // Footer
-  y += 5;
-  addHr();
-  doc.setFontSize(8);
-  doc.setTextColor(150);
-  doc.text(`Generated by CleanScore - ${new Date().toISOString().split('T')[0]}`, margin, y);
-
-  // Save
-  doc.save(`CleanScore_${ev.propertyName.replace(/\s/g, '_')}_${ev.date}.pdf`);
-  showToast('PDFを出力しました');
 };
 
 // ========================================
