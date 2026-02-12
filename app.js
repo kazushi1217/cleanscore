@@ -1236,25 +1236,85 @@ async function exportHistoryPDF() {
     </tr>
   `).join('');
 
-  // コメント一覧（全評価から、直近10件まで）
-  const recentEvals = [...evals].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
-  const commentsHTML = recentEvals.map(ev => {
-    const comments = [];
+  // === スコアベースの評価分析を自動生成 ===
+  function generateAnalysis() {
+    const lines = [];
+
+    // 全体評価
+    const grade = overallAvg >= 90 ? 'S' : overallAvg >= 80 ? 'A' : overallAvg >= 70 ? 'B' : overallAvg >= 60 ? 'C' : 'D';
+    const gradeComment = {
+      'S': '非常に優秀な品質を維持しています。',
+      'A': '良好な品質水準です。',
+      'B': '概ね標準的な品質ですが改善の余地があります。',
+      'C': '品質にばらつきがあり、重点的な改善が必要です。',
+      'D': '品質基準を大きく下回っており、早急な改善が求められます。',
+    }[grade];
+    lines.push(`<b>【総合評価: ${grade}ランク】</b> ${gradeComment}`);
+
+    // スコア安定性
+    const range = overallMax - overallMin;
+    if (evals.length >= 3) {
+      if (range <= 10) lines.push('スコアの振れ幅が小さく、安定した品質を維持しています。');
+      else if (range <= 25) lines.push(`スコアの振れ幅は${range}点で、やや品質にばらつきがあります。`);
+      else lines.push(`スコアの振れ幅が${range}点と大きく、品質の安定化が課題です。`);
+    }
+
+    // トレンド分析（直近3件）
+    const sorted = [...evals].sort((a, b) => a.date.localeCompare(b.date));
+    if (sorted.length >= 3) {
+      const recent3 = sorted.slice(-3).map(e => e.scores.totalScore);
+      const trend = recent3[2] - recent3[0];
+      if (trend > 5) lines.push(`直近3回で+${trend}点の上昇傾向。改善の取り組みが成果を出しています。`);
+      else if (trend < -5) lines.push(`直近3回で${trend}点の下降傾向。原因の分析と対策が必要です。`);
+      else lines.push('直近3回のスコアは安定しています。');
+    }
+
+    // 箇所別の弱点分析
+    const areaAvgs = {};
     for (const area of AREAS) {
-      if (ev.comments && ev.comments[area.id]) {
-        comments.push(`<span style="color:#6366f1;">${area.emoji}${area.name}:</span> ${ev.comments[area.id]}`);
+      const scores = evals.map(e => e.scores.areaScores[area.id]).filter(s => s !== undefined);
+      if (scores.length > 0) {
+        areaAvgs[area.id] = { name: area.name, emoji: area.emoji, avg: Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) };
       }
     }
-    if (ev.overallComment) {
-      comments.push(`<span style="color:#10b981;">💬全体:</span> ${ev.overallComment}`);
+    const weakAreas = Object.values(areaAvgs).filter(a => a.avg < 7).sort((a, b) => a.avg - b.avg);
+    const strongAreas = Object.values(areaAvgs).filter(a => a.avg >= 9).sort((a, b) => b.avg - a.avg);
+
+    if (weakAreas.length > 0) {
+      lines.push(`<b>【要改善箇所】</b> ${weakAreas.map(a => `${a.emoji}${a.name}(平均${a.avg}点)`).join('、')}が弱点です。重点的な指導を推奨します。`);
     }
-    if (comments.length === 0) return '';
-    return `
-      <div style="margin-bottom:4px;padding:4px 6px;background:#f9fafb;border-radius:4px;border-left:2px solid #6366f1;">
-        <div style="font-size:9px;color:#6b7280;margin-bottom:1px;"><strong>${ev.propertyName}</strong> ― ${ev.date}（${ev.staff.map(s => s.name).join('、')}）</div>
-        <div style="font-size:9px;line-height:1.4;">${comments.join('<br>')}</div>
-      </div>`;
-  }).filter(Boolean).join('');
+    if (strongAreas.length > 0) {
+      lines.push(`<b>【優良箇所】</b> ${strongAreas.map(a => `${a.emoji}${a.name}(平均${a.avg}点)`).join('、')}は高品質を維持しています。`);
+    }
+
+    // 個人別分析
+    if (staffStats.length > 0) {
+      const best = staffStats.reduce((a, b) => a.avg > b.avg ? a : b);
+      const worst = staffStats.reduce((a, b) => a.avg < b.avg ? a : b);
+      if (staffStats.length >= 2 && best.name !== worst.name) {
+        const gap = best.avg - worst.avg;
+        lines.push(`<b>【個人差】</b> 最高は${best.name}(${best.avg}点)、最低は${worst.name}(${worst.avg}点)で差は${gap}点。${gap > 15 ? 'スキル差が大きいため、ペア作業時のフォロー体制を検討してください。' : '概ね均一な水準です。'}`);
+      }
+      // 個人の改善/成長
+      for (const s of staffStats) {
+        if (s.count >= 3) {
+          const personalEvals = evals.filter(e => e.scores.staffScores && e.scores.staffScores[s.name] !== undefined)
+            .sort((a, b) => a.date.localeCompare(b.date));
+          const recent = personalEvals.slice(-3).map(e => e.scores.staffScores[s.name]);
+          const personalTrend = recent[recent.length - 1] - recent[0];
+          if (personalTrend > 10) lines.push(`${s.name}は直近で+${personalTrend}点の大幅成長。`);
+          else if (personalTrend < -10) lines.push(`${s.name}は直近で${personalTrend}点低下。フォローが必要です。`);
+        }
+      }
+    }
+
+    return lines;
+  }
+
+  const analysisLines = generateAnalysis();
+  const analysisHTML = analysisLines.map(line =>
+    `<div style="margin-bottom:3px;padding:3px 6px;font-size:9px;line-height:1.5;border-left:2px solid #8b5cf6;background:#faf5ff;">${line}</div>`
+  ).join('');
 
   // グラフ画像を取得
   const chartCanvas = document.getElementById('historyChart');
@@ -1298,8 +1358,8 @@ async function exportHistoryPDF() {
       <!-- グラフ -->
       ${chartImgSrc ? `
       <h3 style="font-size:11px;color:#374151;margin:8px 0 4px;border-left:3px solid #6366f1;padding-left:6px;">スコア推移グラフ</h3>
-      <div style="background:#f9fafb;padding:6px;border-radius:6px;margin-bottom:8px;">
-        <img src="${chartImgSrc}" style="width:100%;max-height:160px;object-fit:contain;" />
+      <div style="background:#f9fafb;padding:6px;border-radius:6px;margin-bottom:8px;max-height:180px;overflow:hidden;">
+        <img src="${chartImgSrc}" style="width:100%;height:auto;display:block;" />
       </div>
       ` : ''}
 
@@ -1327,11 +1387,9 @@ async function exportHistoryPDF() {
         </tbody>
       </table>
 
-      <!-- コメント一覧 -->
-      ${commentsHTML ? `
-      <h3 style="font-size:11px;color:#374151;margin:8px 0 4px;border-left:3px solid #10b981;padding-left:6px;">コメント一覧（直近10件）</h3>
-      ${commentsHTML}
-      ` : ''}
+      <!-- 評価分析 -->
+      <h3 style="font-size:11px;color:#374151;margin:8px 0 4px;border-left:3px solid #10b981;padding-left:6px;">📋 評価分析</h3>
+      ${analysisHTML}
 
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:8px 0 4px;">
       <div style="font-size:8px;color:#9ca3af;text-align:right;">CleanScore - ${new Date().toISOString().split('T')[0]} 生成</div>
